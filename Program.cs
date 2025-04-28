@@ -3,6 +3,83 @@ using Google.Apis.Auth.OAuth2;
 using KafkaConsoleApp;
 using static System.Formats.Asn1.AsnWriter;
 
+
+using Confluent.Kafka;
+using Google.Apis.Auth.OAuth2;
+using System;
+using System.Threading.Tasks;
+
+using Confluent.Kafka;
+using Google.Apis.Auth.OAuth2;
+using System;
+using System.Threading.Tasks;
+
+using Confluent.Kafka;
+using Google.Apis.Auth.OAuth2;
+using System;
+using System.Threading.Tasks;
+
+class Program
+{
+    private const string BootstrapServers = "your-kafka-bootstrap-server:9092";
+    private const string Topic = "your-topic";
+    private const string Scope = "https://www.googleapis.com/auth/cloud-platform";
+
+    static async Task Main(string[] args)
+    {
+        var config = new ProducerConfig
+        {
+            BootstrapServers = BootstrapServers,
+            SecurityProtocol = SecurityProtocol.SaslSsl,
+            SaslMechanism = SaslMechanism.OAuthBearer
+        };
+
+        using var producer = new ProducerBuilder<string, string>(config)
+            .SetOAuthBearerTokenRefreshHandler(async (c, _) =>
+            {
+                try
+                {
+                    var credential = await GoogleCredential.GetApplicationDefaultAsync();
+                    if (credential.IsCreateScopedRequired)
+                    {
+                        credential = credential.CreateScoped(Scope);
+                    }
+
+                    var accessToken = await credential.UnderlyingCredential.GetAccessTokenForRequestAsync();
+                    var expiry = DateTime.UtcNow.AddMinutes(50); // Adjust according to token expiry
+
+                    // If token is expired or close to expiration, refresh it
+                    if (expiry <= DateTime.UtcNow)
+                    {
+                        accessToken = await credential.UnderlyingCredential.GetAccessTokenForRequestAsync();
+                        expiry = DateTime.UtcNow.AddMinutes(50);  // Recalculate the new expiration time
+                    }
+                    c.OAuthBearerSetToken(accessToken, ((DateTimeOffset)expiry).ToUnixTimeSeconds(), "unused");
+                }
+                catch (Exception ex)
+                {
+                    c.OAuthBearerSetTokenFailure(ex.Message);
+                }
+            })
+            .Build();
+
+        try
+        {
+            var deliveryResult = await producer.ProduceAsync(Topic, new Message<string, string>
+            {
+                Key = "key-test",
+                Value = "Hello Kafka from C# with OAuth!"
+            });
+
+            Console.WriteLine($"Delivered '{deliveryResult.Value}' to '{deliveryResult.TopicPartitionOffset}'");
+        }
+        catch (ProduceException<string, string> e)
+        {
+            Console.WriteLine($"[ERROR] {e.Error.Reason}");
+        }
+    }
+}
+/*
 class Program
 {
     private const string BootstrapServers = "bootstrap.kafka-dev-cluster.us-east4.managedkafka.dev-soc2-001.cloud.goog:9092";
@@ -79,6 +156,7 @@ public class KafkaProducer
     }
 }
 
+*/
 /*
 public class KafkaProducer
 {
