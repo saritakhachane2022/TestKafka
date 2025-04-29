@@ -20,6 +20,8 @@ public class Program
             BootstrapServers = "bootstrap.kafka-dev-cluster.us-east4.managedkafka.dev-soc2-001.cloud.goog:9092",
             SecurityProtocol = SecurityProtocol.SaslSsl,
             SaslMechanism = SaslMechanism.OAuthBearer,
+            MessageTimeoutMs = 30000, // 30 seconds
+            RequestTimeoutMs = 30000  // 30 seconds
         };
 
         // Inject the dynamically fetched token
@@ -66,10 +68,13 @@ public class Program
     // Fetch the access token dynamically
     static async Task<string> FetchAccessTokenAsync()
     {
-        GoogleCredential credential = await GoogleCredential.GetApplicationDefaultAsync();
-        // Request an access token for Cloud Platform scope
-        var accessToken = await credential.UnderlyingCredential.GetAccessTokenForRequestAsync("https://www.googleapis.com/auth/cloud-platform");
-        return accessToken;
+         GoogleCredential credential = await GoogleCredential.GetApplicationDefaultAsync();
+          // Request an access token for Cloud Platform scope
+          var accessToken = await credential.UnderlyingCredential.GetAccessTokenForRequestAsync();
+          return accessToken;
+        
+
+       
     }
 }
 
