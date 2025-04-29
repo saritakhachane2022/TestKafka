@@ -33,6 +33,7 @@ public class Program
            try
            {
                var token = await FetchAccessTokenAsync();
+               Console.WriteLine($"Fetched Token: {token}");
                var expirationInMilliseconds = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeMilliseconds();
 
                Console.WriteLine($"Now: {DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}, Exp: {expirationInMilliseconds}");
