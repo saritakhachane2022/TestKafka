@@ -1,28 +1,82 @@
 using Confluent.Kafka;
 using Google.Apis.Auth.OAuth2;
 using KafkaConsoleApp;
+using System.Net.NetworkInformation;
 using static System.Formats.Asn1.AsnWriter;
 
 
-using Confluent.Kafka;
-using Google.Apis.Auth.OAuth2;
 using System;
 using System.Threading.Tasks;
 
-using Confluent.Kafka;
-using Google.Apis.Auth.OAuth2;
-using System;
-using System.Threading.Tasks;
 
-using Confluent.Kafka;
-using Google.Apis.Auth.OAuth2;
-using System;
-using System.Threading.Tasks;
+public class Program
+{
+    static async Task Main(string[] args)
+    {
+       // var token = await FetchAccessTokenAsync();
 
+        var config = new ProducerConfig
+        {
+            BootstrapServers = "bootstrap.kafka-dev-cluster.us-east4.managedkafka.dev-soc2-001.cloud.goog:9092",
+            SecurityProtocol = SecurityProtocol.SaslSsl,
+            SaslMechanism = SaslMechanism.OAuthBearer,
+        };
+
+        // Inject the dynamically fetched token
+        //  config.Set("sasl.oauthbearer.token", token);
+        //  config.Set("sasl.oauthbearer.config", $"token={token}");
+        // config.Set("sasl.oauthbearer.config", "scope=your-scope principal=your-principal");
+
+        using var producer = new ProducerBuilder<string, string>(config)
+       .SetOAuthBearerTokenRefreshHandler(async (c, _) =>
+       {
+           try
+           {
+               var token = await FetchAccessTokenAsync();
+               var expirationInMilliseconds = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeMilliseconds();
+
+               Console.WriteLine($"Now: {DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}, Exp: {expirationInMilliseconds}");
+               c.OAuthBearerSetToken(token, expirationInMilliseconds, "unused");
+           }
+           catch (Exception ex)
+           {
+               c.OAuthBearerSetTokenFailure(ex.Message);
+           }
+       })
+       .Build();
+
+
+        //using var producer = new ProducerBuilder<string, string>(config).Build();
+
+        var topic = "docstore-document-upload-dev";
+        var message = new Message<string, string> { Key = "key1", Value = "Hello Kafka with dynamic OAuthBearer!" };
+
+        try
+        {
+            var deliveryResult = await producer.ProduceAsync(topic, message);
+            Console.WriteLine($"Delivered '{deliveryResult.Value}' to '{deliveryResult.TopicPartitionOffset}'");
+        }
+        catch (ProduceException<string, string> ex)
+        {
+            Console.WriteLine($"Delivery failed: {ex.Error.Reason}");
+        }
+    }
+
+    // Fetch the access token dynamically
+    static async Task<string> FetchAccessTokenAsync()
+    {
+        GoogleCredential credential = await GoogleCredential.GetApplicationDefaultAsync();
+        // Request an access token for Cloud Platform scope
+        var accessToken = await credential.UnderlyingCredential.GetAccessTokenForRequestAsync("https://www.googleapis.com/auth/cloud-platform");
+        return accessToken;
+    }
+}
+
+/*
 class Program
 {
-    private const string BootstrapServers = "your-kafka-bootstrap-server:9092";
-    private const string Topic = "your-topic";
+    private const string BootstrapServers = "bootstrap.kafka-dev-cluster.us-east4.managedkafka.dev-soc2-001.cloud.goog:9092";
+    private const string Topic = "docstore-document-upload-dev";
     private const string Scope = "https://www.googleapis.com/auth/cloud-platform";
 
     static async Task Main(string[] args)
@@ -33,6 +87,9 @@ class Program
             SecurityProtocol = SecurityProtocol.SaslSsl,
             SaslMechanism = SaslMechanism.OAuthBearer
         };
+          var tokenProvider = new TokenProvider();
+         var token = await tokenProvider.GetTokenAsync();
+
 
         using var producer = new ProducerBuilder<string, string>(config)
             .SetOAuthBearerTokenRefreshHandler(async (c, _) =>
@@ -45,16 +102,11 @@ class Program
                         credential = credential.CreateScoped(Scope);
                     }
 
-                    var accessToken = await credential.UnderlyingCredential.GetAccessTokenForRequestAsync();
-                    var expiry = DateTime.UtcNow.AddMinutes(50); // Adjust according to token expiry
+                   // var accessToken = token;// await credential.UnderlyingCredential.GetAccessTokenForRequestAsync();
+                   // var expiry = DateTime.UtcNow.AddMinutes(50); // Adjust according to token expiry
 
-                    // If token is expired or close to expiration, refresh it
-                    if (expiry <= DateTime.UtcNow)
-                    {
-                        accessToken = await credential.UnderlyingCredential.GetAccessTokenForRequestAsync();
-                        expiry = DateTime.UtcNow.AddMinutes(50);  // Recalculate the new expiration time
-                    }
-                    c.OAuthBearerSetToken(accessToken, ((DateTimeOffset)expiry).ToUnixTimeSeconds(), "unused");
+                   
+c.OAuthBearerSetToken(token.token, ((DateTimeOffset)DateTimeOffset.FromUnixTimeSeconds((long)token.expiry)).ToUnixTimeSeconds(), "unused");
                 }
                 catch (Exception ex)
                 {
@@ -79,6 +131,8 @@ class Program
         }
     }
 }
+
+*/
 /*
 class Program
 {
