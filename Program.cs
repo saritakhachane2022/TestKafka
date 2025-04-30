@@ -11,45 +11,58 @@ using System.Threading.Tasks;
 
 public class Program
 {
+    static string? googleToken = null;
+   static DateTime lastTokenRefresh;
     static async Task Main(string[] args)
     {
-       // var token = await FetchAccessTokenAsync();
 
+        // var token = await FetchAccessTokenAsync();
+
+        //var config = new ProducerConfig
+        //{
+        //    BootstrapServers = "bootstrap.kafka-dev-cluster.us-east4.managedkafka.dev-soc2-001.cloud.goog:9092",
+        //    SecurityProtocol = SecurityProtocol.SaslSsl,
+        //    SaslMechanism = SaslMechanism.OAuthBearer,
+        //    MessageTimeoutMs = 30000, // 30 seconds
+        //    RequestTimeoutMs = 30000  // 30 seconds
+        //};
         var config = new ProducerConfig
         {
             BootstrapServers = "bootstrap.kafka-dev-cluster.us-east4.managedkafka.dev-soc2-001.cloud.goog:9092",
             SecurityProtocol = SecurityProtocol.SaslSsl,
-            SaslMechanism = SaslMechanism.OAuthBearer,
+            SaslMechanism = SaslMechanism.Plain,
+            // sasl.jaas.config = org.apache.kafka.common.security.plain.PlainLoginModule required
+            SaslUsername = "phoenix-dev-sa@global-sharedsvc-dev-001.iam.gserviceaccount.com",
+            SaslPassword = await GetGoogleAccessToken(),
             MessageTimeoutMs = 30000, // 30 seconds
-            RequestTimeoutMs = 30000  // 30 seconds
+           RequestTimeoutMs = 30000  // 30 seconds
         };
-
         // Inject the dynamically fetched token
         //  config.Set("sasl.oauthbearer.token", token);
         //  config.Set("sasl.oauthbearer.config", $"token={token}");
         // config.Set("sasl.oauthbearer.config", "scope=your-scope principal=your-principal");
 
-        using var producer = new ProducerBuilder<string, string>(config)
-       .SetOAuthBearerTokenRefreshHandler(async (c, _) =>
-       {
-           try
-           {
-               var token = "eyJ0eXAiOiAiSldUIiwgImFsZyI6ICJHT09HX09BVVRIMl9UT0tFTiJ9.eyJleHAiOiAxNzQ1OTQ0OTY4LjE1NTU0NSwgImlhdCI6IDE3NDU5NDQwODQuMTU1NTkxLCAiaXNzIjogIkdvb2dsZSIsICJzY29wZSI6ICJrYWZrYSIsICJzdWIiOiAicGhvZW5peC1kZXYtc2FAZ2xvYmFsLXNoYXJlZHN2Yy1kZXYtMDAxLmlhbS5nc2VydmljZWFjY291bnQuY29tIn0.eWEyOS5jLmMwQVNSSzBHYkgyZjN0MlB2dkpNeUExQzhaN2gyWDdaQU5Dblp1aWdfZ3M3Y2d1RXBXTEhfeHRUaXJQMXVYLWJGemFWeHRYZ3d0bGJLU1VIaTV2SWhEaXpjd1VrR0dHeTVkYzVqQ1dYMlFuVmtBYThwUmVMLThOTDZXTVhMbzBMZ0kzRUpISVI2SEJEaHhLem5IY3hjRG9PVV9FRGFLZ3VoT1B3RVVJY3pTMXZzZDJ0Tkl2dDJYQUdfZmNDcm93QmdWY2p2R1FLcng3cnRGQTJXaHgwUk9EczV3RmNsN3BLcERvZkhFWG9mMUNIcHZ1dnBaSUdfcm1aNXFUZkxpV2c5RmFtQUw0M3BidF9VT0J0Q3ZrSXBHWWVQRXdoTDFXRUpHQXVTcTlTUDlZR19Xd2U2NklEeVF3ZURVc1FLZ2NqZW54ck1hU21wRVM5NG9sV3UyX0RPdDhqYURXMmpXZWdMZkNzaGJmZ0xwejgzazltZi1XcEtURkVvcm5nNXRhVmlaTEMxdGhZdVJ6bTVSTkFBempDUFZhcGlmaDc1RmNfemFuOTB5NlZ3ci02eVVNU3J4SDRQRXJuay1VTEpkcjcxc1VibndfZ2VZT3RWdklyemNrODhkNi1wdW5ZSXExeDFMbUdxX3d3VjFIX2pZTE1ZVGtHa1doQTZwUFpqR2xDTGRWUDN5ZGxaVDhQSDdCZVE0UnlFMnJtRDRxMFZQM1JET3JQaUVKUGRRVU42eW5rTUt0SWpQRFRsazJ6bDB2Rnh0WkhrbVBUQnRhalBObkJ6bTJ3ZlRVOE9CYXF1aTRiMlBsT1VFNjIwUFNVVXR0VVM0OTVrcDBtc0pJNlpqcGdvdldrUXk1clNJajBrdzN1QnhzNk9pOHh2cEY5UVFTOXNiU2FvNFhmU21pXzBwdjdzcEp3NXl2OVdJUjMya0pReGM0WUJteFhZb2RXVWxWVWcyand5XzF2Snd2TXJhWC1hd2FxbTRZV2pfNy1tMTd4alljZndkblVtbWF4bTZiZlowd3p2NFVRMmYxMG9RdzZkYmMtcWJmZmFfWkJfMDdZTVVJcThYZXRoY3JqWTg1Rl9rVThfendkUVdpbFNSMW1GaHRneDFpSS1WbGNXRmtqMkYzdGZ5bmZpbmtPU0JrenB4VXJRX25oeGdPZ19ucU1GMFM1a2w1endjLUIzZDkyLU9PcnptZlV6SnY3QkpXZVpRMnJTZXFPRjI3d2N0WVNTenNjMmtNY3VhVVJWWm4ya2Qzel9SZmFnaHJ4NllTQjcwazRqeWlRWmRRMnNnRlUtdTBqcEl2UnFraDRGMDJ3MnhNdlZNLVJxbGplNGl6Z3ZyMWJ6dm1aTQ";
-                   //await FetchAccessTokenAsync();
-               Console.WriteLine($"Fetched Token: {token}");
-               var expirationInMilliseconds = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeMilliseconds();
+        /*  using var producer = new ProducerBuilder<string, string>(config)
+         .SetOAuthBearerTokenRefreshHandler(async (c, _) =>
+         {
+             try
+             {
+                 var token = await FetchAccessTokenAsync();
+                 Console.WriteLine($"Fetched Token: {token}");
+                 var expirationInMilliseconds = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeMilliseconds();
 
-               Console.WriteLine($"Now: {DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}, Exp: {expirationInMilliseconds}");
-               c.OAuthBearerSetToken(token, expirationInMilliseconds, "unused");
-           }
-           catch (Exception ex)
-           {
-               c.OAuthBearerSetTokenFailure(ex.Message);
-           }
-       })
-       .Build();
-
-
+                 Console.WriteLine($"Now: {DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}, Exp: {expirationInMilliseconds}");
+                 c.OAuthBearerSetToken(token, expirationInMilliseconds, "unused");
+             }
+             catch (Exception ex)
+             {
+                 c.OAuthBearerSetTokenFailure(ex.Message);
+             }
+         })
+         .Build();
+        */
+        using var producer = new ProducerBuilder<string, string>(config)        
+  .Build();
         //using var producer = new ProducerBuilder<string, string>(config).Build();
 
         var topic = "docstore-document-upload-dev";
@@ -65,6 +78,7 @@ public class Program
             Console.WriteLine($"Delivery failed: {ex.Error.Reason}");
         }
     }
+    /*
 
     // Fetch the access token dynamically
     static async Task<string> FetchAccessTokenAsync()
@@ -76,6 +90,29 @@ public class Program
         
 
        
+    }
+    */
+
+    
+    static  async Task<string> GetGoogleAccessToken()
+    {
+        if (!string.IsNullOrEmpty(googleToken) && (lastTokenRefresh.AddSeconds(10) >= DateTime.UtcNow))
+        {
+            return googleToken;
+        }
+
+        try
+        {
+            GoogleCredential credential = await GoogleCredential.GetApplicationDefaultAsync();
+            ITokenAccess tokenAccess = credential.CreateScoped("https://www.googleapis.com/auth/cloud-platform");
+            googleToken = await tokenAccess.GetAccessTokenForRequestAsync();
+            lastTokenRefresh = DateTime.UtcNow;
+            return googleToken;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception(ex.Message); // "Please use `gcloud auth application-default print-access-token` on the commandline to authenticate with google.");
+        }
     }
 }
 
