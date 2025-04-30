@@ -15,7 +15,8 @@ public class Program
    static DateTime lastTokenRefresh;
     static async Task Main(string[] args)
     {
-
+       // await Producerr();
+        await Consumerr();
         // var token = await FetchAccessTokenAsync();
 
         //var config = new ProducerConfig
@@ -26,17 +27,7 @@ public class Program
         //    MessageTimeoutMs = 30000, // 30 seconds
         //    RequestTimeoutMs = 30000  // 30 seconds
         //};
-        var config = new ProducerConfig
-        {
-            BootstrapServers = "bootstrap.kafka-dev-cluster.us-east4.managedkafka.dev-soc2-001.cloud.goog:9092",
-            SecurityProtocol = SecurityProtocol.SaslSsl,
-            SaslMechanism = SaslMechanism.Plain,
-            // sasl.jaas.config = org.apache.kafka.common.security.plain.PlainLoginModule required
-            SaslUsername = "phoenix-dev-sa@global-sharedsvc-dev-001.iam.gserviceaccount.com",
-            SaslPassword = await GetGoogleAccessToken(),
-            MessageTimeoutMs = 30000, // 30 seconds
-           RequestTimeoutMs = 30000  // 30 seconds
-        };
+
         // Inject the dynamically fetched token
         //  config.Set("sasl.oauthbearer.token", token);
         //  config.Set("sasl.oauthbearer.config", $"token={token}");
@@ -61,22 +52,7 @@ public class Program
          })
          .Build();
         */
-        using var producer = new ProducerBuilder<string, string>(config)        
-  .Build();
-        //using var producer = new ProducerBuilder<string, string>(config).Build();
 
-        var topic = "docstore-document-upload-dev";
-        var message = new Message<string, string> { Key = "key1", Value = "Hello Kafka with dynamic OAuthBearer!" };
-
-        try
-        {
-            var deliveryResult = await producer.ProduceAsync(topic, message);
-            Console.WriteLine($"Delivered '{deliveryResult.Value}' to '{deliveryResult.TopicPartitionOffset}'");
-        }
-        catch (ProduceException<string, string> ex)
-        {
-            Console.WriteLine($"Delivery failed: {ex.Error.Reason}");
-        }
     }
     /*
 
@@ -93,7 +69,112 @@ public class Program
     }
     */
 
-    
+    static async Task Producerr()
+    {
+        var config = new ProducerConfig
+        {
+            BootstrapServers = "bootstrap.kafka-dev-cluster.us-east4.managedkafka.dev-soc2-001.cloud.goog:9092",
+            SecurityProtocol = SecurityProtocol.SaslSsl,
+            SaslMechanism = SaslMechanism.Plain,
+            // sasl.jaas.config = org.apache.kafka.common.security.plain.PlainLoginModule required
+            SaslUsername = "phoenix-dev-sa@global-sharedsvc-dev-001.iam.gserviceaccount.com",
+            SaslPassword = await GetGoogleAccessToken(),
+            MessageTimeoutMs = 30000, // 30 seconds
+            RequestTimeoutMs = 30000  // 30 seconds
+        };
+        using var producer = new ProducerBuilder<string, string>(config)
+  .Build();
+        //using var producer = new ProducerBuilder<string, string>(config).Build();
+
+        var topic = "docstore-document-upload-dev";
+        var message = new Message<string, string> { Key = "key1", Value = "Hello Kafka with dynamic OAuthBearer!" };
+
+        try
+        {
+            var deliveryResult = await producer.ProduceAsync(topic, message);
+            Console.WriteLine($"Delivered '{deliveryResult.Value}' to '{deliveryResult.TopicPartitionOffset}'");
+        }
+        catch (ProduceException<string, string> ex)
+        {
+            Console.WriteLine($"Delivery failed: {ex.Error.Reason}");
+        }
+    }
+
+
+
+
+
+
+    static async Task Consumerr()
+    {
+        var config = new ConsumerConfig
+        {
+            BootstrapServers = "bootstrap.kafka-dev-cluster.us-east4.managedkafka.dev-soc2-001.cloud.goog:9092",
+            SecurityProtocol = SecurityProtocol.SaslSsl,
+            SaslMechanism = SaslMechanism.Plain,
+            SaslUsername = "phoenix-dev-sa@global-sharedsvc-dev-001.iam.gserviceaccount.com",
+            SaslPassword = await GetGoogleAccessToken(),
+            GroupId = "doc-consumer-group-id",
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            EnableAutoCommit = true
+        };
+
+        var topic = "docstore-document-upload-dev";
+
+        using var consumer = new ConsumerBuilder<string, string>(config).Build();
+
+        consumer.Subscribe(topic);
+
+        Console.WriteLine("Consumer started. Press Ctrl+C to stop.");
+
+        var cts = new CancellationTokenSource();
+
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        try
+        {
+            while (!cts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    var cr = consumer.Consume(cts.Token);
+                    Console.WriteLine($"Consumed message '{cr.Value}' at: '{cr.TopicPartitionOffset}'.");
+                }
+                catch (ConsumeException e)
+                {
+                    Console.WriteLine($"Consume error: {e.Error.Reason}");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Gracefully exit
+        }
+        finally 
+        {
+            consumer.Close();
+        }
+        try
+        {
+            var cr = consumer.Consume(cts.Token);
+            Console.WriteLine($"Consumed message '{cr.Message.Value}' at: '{cr.TopicPartitionOffset}'.");
+        }
+        catch (ConsumeException e)
+        {
+            Console.WriteLine($"Consume error: {e.Error.Reason}");
+        }
+        {
+            consumer.Close();
+        }
+
+    }
+
+
+
     static  async Task<string> GetGoogleAccessToken()
     {
         if (!string.IsNullOrEmpty(googleToken) && (lastTokenRefresh.AddSeconds(10) >= DateTime.UtcNow))
